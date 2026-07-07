@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>TLS Store Visit Summary</title>
+<style>
+  :root{
+    --ink:#1c2b26;
+    --ink-soft:#5a6b64;
+    --paper:#f5f4ef;
+    --card:#ffffff;
+    --line:#e2e1d9;
+    --green:#1f6f43;
+    --green-deep:#14532d;
+    --gold:#b8860b;
+    --gold-bg:#fdf3d7;
+    --ok:#1f6f43;
+    --ok-bg:#e3f1e8;
+    --warn:#c05d0e;
+    --warn-bg:#fdeadb;
+    --flag:#b91c1c;
+    --flag-bg:#fbe3e3;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{font-size:16px}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper);color:var(--ink);
+    padding-bottom:110px;
+  }
+  /* ---------- header ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:var(--green-deep);color:#fff;
+    padding:12px 16px 10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);
+  }
+  header h1{font-size:1rem;font-weight:700;letter-spacing:.02em}
+  header .sub{font-size:.72rem;opacity:.75;margin-top:2px}
+  .progress-wrap{margin-top:8px;display:flex;align-items:center;gap:10px}
+  .progress-bar{flex:1;height:6px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden}
+  .progress-fill{height:100%;width:0%;background:#facc15;border-radius:3px;transition:width .3s}
+  .progress-num{font-size:.72rem;font-variant-numeric:tabular-nums;opacity:.9;white-space:nowrap}
+  /* ---------- layout ---------- */
+  main{max-width:640px;margin:0 auto;padding:16px 14px}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:14px;
+  }
+  .card h2{font-size:1.05rem;font-weight:800;letter-spacing:.01em;display:flex;align-items:center;gap:8px}
+  .card h2 .badge{margin-left:auto;font-size:.68rem;font-weight:700;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:3px 9px;font-variant-numeric:tabular-nums}
+  .hint{font-size:.78rem;color:var(--ink-soft);margin-top:4px;line-height:1.45}
+  label.field{display:block;font-size:.75rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 5px}
+  input[type=text],input[type=date],input[type=email],textarea{
+    width:100%;border:1.5px solid var(--line);border-radius:10px;background:#fff;
+    padding:11px 12px;font-size:1rem;font-family:inherit;color:var(--ink);
+  }
+  input:focus,textarea:focus{outline:none;border-color:var(--green)}
+  textarea{resize:vertical;min-height:74px;line-height:1.45}
+  /* format chips */
+  .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .chip{
+    border:1.5px solid var(--line);border-radius:10px;background:#fff;
+    padding:11px 8px;font-size:.9rem;font-weight:600;color:var(--ink);text-align:center;cursor:pointer;
+  }
+  .chip.sel{background:var(--green);border-color:var(--green);color:#fff}
+  /* ---------- rating legend ---------- */
+  .legend{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+  .legend div{font-size:.68rem;text-align:center;color:var(--ink-soft);line-height:1.3}
+  .legend b{display:block;font-size:1.05rem}
+  /* ---------- department nav ---------- */
+  .dept-head{
+    background:var(--green-deep);color:#fff;border-radius:var(--radius);
+    padding:13px 16px;margin:20px 0 10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+    user-select:none;
+  }
+  .dept-head h2{font-size:1rem;font-weight:800;letter-spacing:.03em}
+  .dept-head .count{font-size:.72rem;background:rgba(255,255,255,.16);border-radius:20px;padding:3px 10px;font-variant-numeric:tabular-nums}
+  .dept-head .caret{margin-left:10px;transition:transform .2s}
+  .dept-head.open .caret{transform:rotate(180deg)}
+  .dept-body{display:none}
+  .dept-body.open{display:block}
+  .subsec{font-size:.85rem;font-weight:800;color:var(--green-deep);margin:16px 4px 8px;display:flex;align-items:center;gap:6px}
+  /* ---------- question ---------- */
+  .q{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px 13px 12px;margin-bottom:9px}
+  .q p{font-size:.92rem;line-height:1.4;font-weight:500}
+  .rate{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}
+  .rate button{
+    border:1.5px solid var(--line);border-radius:10px;background:#fff;
+    padding:9px 0 7px;font-size:1.15rem;cursor:pointer;line-height:1;
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+  }
+  .rate button small{font-size:.56rem;font-weight:700;letter-spacing:.03em;color:var(--ink-soft);text-transform:uppercase}
+  .rate button.sel small{color:inherit}
+  .rate button.sel[data-r="star"]{background:var(--gold-bg);border-color:var(--gold);color:var(--gold)}
+  .rate button.sel[data-r="good"]{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+  .rate button.sel[data-r="warn"]{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+  .rate button.sel[data-r="flag"]{background:var(--flag-bg);border-color:var(--flag);color:var(--flag)}
+  .notes{margin-top:9px;display:none}
+  .notes.show{display:block}
+  .notes textarea{min-height:58px;font-size:.9rem}
+  .notes .nl{font-size:.68rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;display:flex;justify-content:space-between}
+  .notes .req{color:var(--flag)}
+  .note-toggle{margin-top:8px;background:none;border:none;font-size:.75rem;font-weight:700;color:var(--green);cursor:pointer;padding:2px 0}
+  /* ---------- overview grid ---------- */
+  .grid-scroll{overflow-x:auto;margin:10px -4px 0}
+  table.ov{border-collapse:collapse;width:100%;min-width:520px}
+  table.ov th{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:6px 4px;text-align:center}
+  table.ov th:first-child{text-align:left}
+  table.ov td{padding:3px}
+  table.ov td.dept{font-size:.78rem;font-weight:700;white-space:nowrap;padding-right:8px}
+  .cell{
+    width:100%;height:38px;border:1.5px solid var(--line);border-radius:8px;background:#fff;
+    font-size:1rem;cursor:pointer;
+  }
+  .cell.star{background:var(--gold-bg);border-color:var(--gold)}
+  .cell.good{background:var(--ok-bg);border-color:var(--ok)}
+  .cell.warn{background:var(--warn-bg);border-color:var(--warn)}
+  .cell.flag{background:var(--flag-bg);border-color:var(--flag)}
+  .callout-row{margin-top:10px}
+  .callout-row label{font-size:.72rem;font-weight:700;color:var(--ink-soft)}
+  .callout-row input{margin-top:3px;font-size:.88rem;padding:8px 10px}
+  /* ---------- footer bar ---------- */
+  .footbar{
+    position:fixed;bottom:0;left:0;right:0;z-index:60;
+    background:#fff;border-top:1px solid var(--line);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+  }
+  .footbar-inner{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center}
+  .attn-pill{font-size:.72rem;font-weight:700;color:var(--ink-soft);white-space:nowrap}
+  .attn-pill b{color:var(--warn)} .attn-pill b.f{color:var(--flag)}
+  .submit-btn{
+    flex:1;background:var(--green-deep);color:#fff;border:none;border-radius:12px;
+    padding:14px;font-size:1rem;font-weight:800;letter-spacing:.02em;cursor:pointer;
+  }
+  .submit-btn:active{transform:scale(.985)}
+  /* toast */
+  .toast{
+    position:fixed;left:50%;bottom:90px;transform:translateX(-50%);
+    background:var(--ink);color:#fff;font-size:.85rem;padding:10px 18px;border-radius:24px;
+    opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;max-width:88%;text-align:center;
+  }
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TLS Store Visit Summary</h1>
+  <div class="sub">Operational Excellence • Sales • Inventory • Shrink • Food Safety • Personal Safety</div>
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="pfill"></div></div>
+    <div class="progress-num" id="pnum">0 / 0</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ COVER ============ -->
+  <div class="card" id="cover">
+    <h2>🏪 Visit Cover Page</h2>
+    <p class="hint">Fill this out first. Cover your summary with the Store Manager, PIC, and Dept. Heads before you leave.</p>
+
+    <label class="field">Store Format</label>
+    <div class="chips" id="fmtChips">
+      <button class="chip" data-v="Conventional">Conventional</button>
+      <button class="chip" data-v="Cost Plus">Cost Plus</button>
+      <button class="chip" data-v="SAL">SAL</button>
+      <button class="chip" data-v="Food Saver">Food Saver</button>
+    </div>
+
+    <label class="field" for="storeNum">HFG Store Number</label>
+    <input type="text" id="storeNum" inputmode="numeric" placeholder="e.g. 118">
+
+    <label class="field" for="regionNum">Region Number</label>
+    <input type="text" id="regionNum" inputmode="numeric" placeholder="e.g. 4">
+
+    <label class="field" for="mgrName">Store Manager Name</label>
+    <input type="text" id="mgrName" placeholder="Store manager">
+
+    <label class="field" for="tlsName">TLS Name</label>
+    <input type="text" id="tlsName" placeholder="Your name">
+
+    <label class="field" for="visitDate">Date of Visit</label>
+    <input type="date" id="visitDate">
+
+    <label class="field">Rating Scale</label>
+    <div class="legend">
+      <div><b>⭐</b>Excellent</div>
+      <div><b>✅</b>Good</div>
+      <div><b>⚠️</b>Attention Needed</div>
+      <div><b>🚩</b>Immediate Action</div>
+    </div>
+  </div>
+
+  <!-- departments injected here -->
+  <div id="depts"></div>
+
+  <!-- ============ OVERVIEW GRID ============ -->
+  <div class="card" id="overviewCard">
+    <h2>📋 High-Level Visit Overview <span class="badge" id="ovBadge"></span></h2>
+    <p class="hint">Fill this out at the end of your visit. Cells pre-fill from your detailed answers (lowest rating in each area) — tap any cell to adjust or set it, tap again to cycle ⭐ → ✅ → ⚠️ → 🚩 → clear.</p>
+    <div class="grid-scroll">
+      <table class="ov">
+        <thead>
+          <tr><th>Department</th><th>Sales</th><th>Inventory</th><th>Shrink</th><th>Food Safety</th><th>Safety</th></tr>
+        </thead>
+        <tbody id="ovBody"></tbody>
+      </table>
+    </div>
+    <div id="callouts"></div>
+  </div>
+
+  <!-- ============ COACHING SUMMARY ============ -->
+  <div class="card">
+    <h2>🗣 Department &amp; Store Coaching Summary</h2>
+    <p class="hint">Always cover with the Store Manager / PIC before leaving.</p>
+    <label class="field" for="bestPractices">Best Practices Observed — what is this management team doing well?</label>
+    <textarea id="bestPractices" placeholder="Wins worth recognizing…"></textarea>
+    <label class="field" for="opportunities">Opportunities for Improvement</label>
+    <textarea id="opportunities" placeholder="Key follow-ups and coaching points…"></textarea>
+  </div>
+
+  <!-- ============ SEND ============ -->
+  <div class="card">
+    <h2>📧 Send Completed Summary</h2>
+    <p class="hint">Email completed summaries to the VP, DO, ROM, RMs, Director of TL, Mandy Mooney, and the Store Manager. Add recipients separated by commas.</p>
+    <label class="field" for="recipients">Recipients</label>
+    <input type="email" id="recipients" multiple value="dhall@houchens.com" placeholder="name@houchens.com, name@houchens.com">
+  </div>
+
+</main>
+
+<div class="footbar">
+  <div class="footbar-inner">
+    <div class="attn-pill" id="attnPill"></div>
+    <button class="submit-btn" id="submitBtn">Submit Visit Report</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= DATA — from Total Loss Store Visit Workbook ================= */
+const CATS = { sales:"📈 Sales Execution", inv:"📦 Inventory Management", shrink:"🗑 Shrink Control", food:"🛡 Food Safety", safety:"👷 Personal Safety" };
+
+const DEPTS = [
+  { id:"grocery", name:"GROCERY", sections:{
+    sales:[
+      "Shelves are stocked to meet customer satisfaction",
+      "Out-of-stocks acceptable",
+      "The Ad is brought to life — promotional displays merchandised to match promos",
+      "Endcaps support seasonal / promo business",
+      "Shelf tags accurate / match product"
+    ],
+    inv:[
+      "Shelf inventory levels support the Groc. Inv. Reduction Plan (inv. on shelf matches tag movement)",
+      "Backroom inventory under control",
+      "Overstock levels being reduced / plan",
+      "TPRs are assigned where needed"
+    ],
+    shrink:[
+      "Rotation followed",
+      "Damages processed daily",
+      "Reclaim current"
+    ],
+    safety:[
+      "Slip, trip, and fall hazards"
+    ]
+  }},
+  { id:"produce", name:"PRODUCE", sections:{
+    sales:[
+      "Fresh appearance",
+      "Cut fruit quality / variety matches tags",
+      "Banana quality / SOP being followed",
+      "The Ad is brought to life"
+    ],
+    inv:[
+      "Cooler inventory appropriate",
+      "Merchandising sales-to-space appropriately on the floor",
+      "Walk-in cooler inventory dated w/ received date"
+    ],
+    shrink:[
+      "Markdown / repurpose policy followed",
+      "RHC / GOT utilized — markdowns / throwaways",
+      "Rotation standards followed"
+    ],
+    food:[
+      "Prep room clean / organized",
+      "Cooler clean / organized"
+    ],
+    safety:[
+      "Mesh gloves available / being used",
+      "Safe knife handling / storage"
+    ]
+  }},
+  { id:"meat", name:"MEAT", sections:{
+    sales:[
+      "Fresh case eye appeal",
+      "Ground beef production appropriate",
+      "The Ad is brought to life",
+      "Must-Have fresh meat variety maintained"
+    ],
+    inv:[
+      "Cooler inventory appropriate",
+      "Proper product rotation in walk-ins and retail cases",
+      "Freezer inventory appropriate",
+      "Product in walk-ins dated with date of receipt",
+      "Production matches demand / use of cutting lists"
+    ],
+    shrink:[
+      "Ground beef dates within standards",
+      "Multiple grind times",
+      "Time stamp on GB scale labels",
+      "Markdown process followed",
+      "Signs of overproduction (excessive reduced items)",
+      "Short-date list maintained (smoked meat)",
+      "RHC / GOT utilized for markdowns / throwaways"
+    ],
+    food:[
+      "Meat case clean — inside and out",
+      "Prep room / walk-ins and equipment cleaned and sanitized regularly",
+      "Grind logs are maintained",
+      "Case and walk-in temps"
+    ],
+    safety:[
+      "PPE utilized (personal protection equipment)",
+      "Safe equipment operation observed — safety features working on equipment"
+    ]
+  }},
+  { id:"deli", name:"DELI / BAKERY", sections:{
+    sales:[
+      "Product levels appropriate",
+      "Thaw-and-sell bakery merchandising",
+      "Grab & Go attractive (hot and cold)",
+      "The Ad is brought to life"
+    ],
+    inv:[
+      "Cooler inventory appropriate",
+      "Freezer inventory appropriate",
+      "Proper product rotation — walk-ins / retail cases",
+      "Build-to-orders followed"
+    ],
+    shrink:[
+      "Dates acceptable",
+      "Markdown process followed — throwaways logged in RHC / GOT devices"
+    ],
+    food:[
+      "Prep area clean and organized",
+      "Proper temps being maintained, hot and cold"
+    ],
+    safety:[
+      "Safe equipment operation observed"
+    ]
+  }},
+  { id:"dairy", name:"DAIRY", sections:{
+    sales:[
+      "Out-of-stocks acceptable",
+      "Milk dates support sales",
+      "The Ad is brought to life"
+    ],
+    inv:[
+      "Cooler inventory appropriate",
+      "Milk inventory controlled"
+    ],
+    shrink:[
+      "Rotation followed",
+      "Short-date list maintained",
+      "Markdown process followed",
+      "Reclaim managed"
+    ],
+    food:[
+      "Cases and cooler clean and organized"
+    ],
+    safety:[
+      "Safe cooler conditions"
+    ]
+  }},
+  { id:"frozen", name:"FROZEN FOOD", sections:{
+    sales:[
+      "The Ad is brought to life",
+      "Out-of-stocks acceptable"
+    ],
+    inv:[
+      "Freezer inventory appropriate",
+      "Overstock controlled"
+    ],
+    shrink:[
+      "Short-date process followed — TPRs in place",
+      "RHC / GOT utilized for markdowns / throwaways"
+    ],
+    food:[
+      "Product condition acceptable / no freezer burn"
+    ],
+    safety:[
+      "No ice hazards observed"
+    ]
+  }}
+];
+
+/* Overview grid departments (includes areas without detailed sections) */
+const OV_DEPTS = [
+  {id:"grocery", name:"Grocery", linked:true},
+  {id:"produce", name:"Produce", linked:true},
+  {id:"meat", name:"Meat", linked:true},
+  {id:"deli", name:"Deli/Bakery", linked:true},
+  {id:"dairy", name:"Dairy", linked:true},
+  {id:"frozen", name:"Frozen", linked:true},
+  {id:"wic", name:"Walk-In Coolers", linked:false},
+  {id:"wif", name:"Walk-In Freezers", linked:false},
+  {id:"recv", name:"Receiving/Stockroom", linked:false}
+];
+const OV_CATS = ["sales","inv","shrink","food","safety"];
+
+const RATINGS = [
+  {key:"star", sym:"⭐", label:"Excellent"},
+  {key:"good", sym:"✅", label:"Good"},
+  {key:"warn", sym:"⚠️", label:"Attention"},
+  {key:"flag", sym:"🚩", label:"Action"}
+];
+const RSYM = {star:"⭐", good:"✅", warn:"⚠️", flag:"🚩"};
+const RLABEL = {star:"Excellent", good:"Good", warn:"Attention Needed", flag:"Immediate Action"};
+const RANK = {flag:0, warn:1, good:2, star:3};
+
+/* ================= STATE ================= */
+const answers = {};        // qid -> {rating, note}
+const ovManual = {};       // "dept.cat" -> rating key or null (manual override)
+const callouts = {};       // ovDeptId -> text
+let totalQ = 0;
+
+/* ================= BUILD DEPARTMENTS ================= */
+const deptsEl = document.getElementById("depts");
+DEPTS.forEach((d, di) => {
+  const head = document.createElement("div");
+  head.className = "dept-head" + (di === 0 ? " open" : "");
+  head.innerHTML = `<h2>${d.name}</h2><span style="display:flex;align-items:center"><span class="count" id="cnt-${d.id}"></span><span class="caret">▾</span></span>`;
+  const body = document.createElement("div");
+  body.className = "dept-body" + (di === 0 ? " open" : "");
+  head.addEventListener("click", () => { head.classList.toggle("open"); body.classList.toggle("open"); });
+
+  Object.entries(d.sections).forEach(([cat, qs]) => {
+    const sh = document.createElement("div");
+    sh.className = "subsec";
+    sh.textContent = CATS[cat];
+    body.appendChild(sh);
+    qs.forEach((text, qi) => {
+      const qid = `${d.id}.${cat}.${qi}`;
+      totalQ++;
+      const q = document.createElement("div");
+      q.className = "q";
+      q.innerHTML = `
+        <p>${text}</p>
+        <div class="rate" data-qid="${qid}">
+          ${RATINGS.map(r=>`<button data-r="${r.key}"><span>${r.sym}</span><small>${r.label}</small></button>`).join("")}
+        </div>
+        <button class="note-toggle" data-qid="${qid}">+ Add coaching note</button>
+        <div class="notes" id="notes-${cssId(qid)}">
+          <div class="nl"><span>Coaching Notes</span><span class="req" id="req-${cssId(qid)}" style="display:none">Required</span></div>
+          <textarea data-qid="${qid}" placeholder="What did you observe, and what's the coaching point?"></textarea>
+        </div>`;
+      body.appendChild(q);
+    });
+  });
+  deptsEl.appendChild(head);
+  deptsEl.appendChild(body);
+});
+
+function cssId(qid){ return qid.replace(/\./g,"-"); }
+
+/* rating buttons */
+document.querySelectorAll(".rate").forEach(row => {
+  row.addEventListener("click", e => {
+    const btn = e.target.closest("button"); if(!btn) return;
+    const qid = row.dataset.qid;
+    const r = btn.dataset.r;
+    const cur = answers[qid]?.rating;
+    row.querySelectorAll("button").forEach(b=>b.classList.remove("sel"));
+    if (cur === r) {
+      delete answers[qid];
+    } else {
+      btn.classList.add("sel");
+      answers[qid] = answers[qid] || {};
+      answers[qid].rating = r;
+      const notesEl = document.getElementById("notes-"+cssId(qid));
+      if (r === "warn" || r === "flag") notesEl.classList.add("show");
+    }
+    syncNoteFlag(qid);
+    refresh();
+  });
+});
+
+/* note toggles + inputs */
+document.querySelectorAll(".note-toggle").forEach(t => {
+  t.addEventListener("click", () => {
+    document.getElementById("notes-"+cssId(t.dataset.qid)).classList.toggle("show");
+  });
+});
+document.querySelectorAll(".notes textarea").forEach(ta => {
+  ta.addEventListener("input", () => {
+    const qid = ta.dataset.qid;
+    answers[qid] = answers[qid] || {};
+    answers[qid].note = ta.value.trim();
+    syncNoteFlag(qid);
+  });
+});
+function syncNoteFlag(qid){
+  const a = answers[qid];
+  const req = document.getElementById("req-"+cssId(qid));
+  const needs = a && (a.rating==="warn"||a.rating==="flag") && !(a.note && a.note.length);
+  req.style.display = needs ? "inline" : "none";
+}
+
+/* ================= OVERVIEW GRID ================= */
+const ovBody = document.getElementById("ovBody");
+OV_DEPTS.forEach(od => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td class="dept">${od.name}</td>` + OV_CATS.map(c =>
+    `<td><button class="cell" data-cell="${od.id}.${c}"></button></td>`).join("");
+  ovBody.appendChild(tr);
+});
+const calloutsEl = document.getElementById("callouts");
+OV_DEPTS.forEach(od => {
+  const row = document.createElement("div");
+  row.className = "callout-row";
+  row.innerHTML = `<label>High Level Callouts — ${od.name}</label>
+    <input type="text" data-callout="${od.id}" placeholder="Optional one-liner">`;
+  calloutsEl.appendChild(row);
+});
+calloutsEl.addEventListener("input", e => {
+  const k = e.target.dataset.callout; if(!k) return;
+  callouts[k] = e.target.value.trim();
+});
+
+function autoRating(deptId, cat){
+  // worst rating among answered questions in that dept/category
+  let worst = null;
+  Object.entries(answers).forEach(([qid, a]) => {
+    if (!a.rating) return;
+    const [d, c] = qid.split(".");
+    if (d===deptId && c===cat) {
+      if (worst===null || RANK[a.rating] < RANK[worst]) worst = a.rating;
+    }
+  });
+  return worst;
+}
+function cellRating(od, cat){
+  const key = od.id + "." + cat;
+  if (key in ovManual) return ovManual[key];        // manual override (may be null = cleared)
+  return od.linked ? autoRating(od.id, cat) : null; // auto from details
+}
+function paintOverview(){
+  let filled = 0;
+  document.querySelectorAll(".cell").forEach(cell => {
+    const [dId, cat] = cell.dataset.cell.split(".");
+    const od = OV_DEPTS.find(o=>o.id===dId);
+    const r = cellRating(od, cat);
+    cell.classList.remove("star","good","warn","flag");
+    if (r){ cell.classList.add(r); cell.textContent = RSYM[r]; filled++; }
+    else cell.textContent = "";
+  });
+  document.getElementById("ovBadge").textContent = filled + " / " + (OV_DEPTS.length * OV_CATS.length);
+}
+ovBody.addEventListener("click", e => {
+  const cell = e.target.closest(".cell"); if(!cell) return;
+  const [dId, cat] = cell.dataset.cell.split(".");
+  const od = OV_DEPTS.find(o=>o.id===dId);
+  const cur = cellRating(od, cat);
+  const order = ["star","good","warn","flag", null];
+  const next = order[(order.indexOf(cur===undefined?null:cur) + 1) % order.length];
+  ovManual[dId + "." + cat] = next;
+  paintOverview();
+});
+
+/* ================= COVER ================= */
+let storeFormat = "";
+document.getElementById("fmtChips").addEventListener("click", e => {
+  const c = e.target.closest(".chip"); if(!c) return;
+  document.querySelectorAll("#fmtChips .chip").forEach(x=>x.classList.remove("sel"));
+  if (storeFormat === c.dataset.v){ storeFormat=""; }
+  else { c.classList.add("sel"); storeFormat = c.dataset.v; }
+});
+document.getElementById("visitDate").value = new Date().toISOString().slice(0,10);
+
+/* ================= PROGRESS / COUNTS ================= */
+function refresh(){
+  const done = Object.values(answers).filter(a=>a.rating).length;
+  document.getElementById("pfill").style.width = (done/totalQ*100) + "%";
+  document.getElementById("pnum").textContent = done + " / " + totalQ;
+  DEPTS.forEach(d => {
+    const t = Object.values(d.sections).reduce((s,q)=>s+q.length,0);
+    const dn = Object.entries(answers).filter(([qid,a])=>qid.startsWith(d.id+".") && a.rating).length;
+    document.getElementById("cnt-"+d.id).textContent = dn + " / " + t;
+  });
+  let w=0,f=0;
+  Object.values(answers).forEach(a=>{ if(a.rating==="warn")w++; if(a.rating==="flag")f++; });
+  document.getElementById("attnPill").innerHTML =
+    (w||f) ? `<b>⚠️ ${w}</b> &nbsp;<b class="f">🚩 ${f}</b>` : "";
+  paintOverview();
+}
+refresh();
+
+/* ================= SUBMIT ================= */
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 3200);
+}
+
+document.getElementById("submitBtn").addEventListener("click", () => {
+  const storeNum = document.getElementById("storeNum").value.trim();
+  const tlsName = document.getElementById("tlsName").value.trim();
+  if (!storeNum || !tlsName){
+    toast("Fill in the HFG Store Number and TLS Name on the cover page first.");
+    document.getElementById("cover").scrollIntoView({behavior:"smooth"});
+    return;
+  }
+  // missing required notes?
+  const missing = Object.entries(answers).filter(([qid,a]) =>
+    (a.rating==="warn"||a.rating==="flag") && !(a.note && a.note.length));
+  if (missing.length){
+    toast(`${missing.length} item(s) marked ⚠️/🚩 still need a coaching note.`);
+    const first = document.getElementById("notes-"+cssId(missing[0][0]));
+    first.classList.add("show");
+    first.scrollIntoView({behavior:"smooth", block:"center"});
+    return;
+  }
+  sendEmail();
+});
+
+function sendEmail(){
+  const g = id => document.getElementById(id).value.trim();
+  const line = "----------------------------------------";
+  const done = Object.values(answers).filter(a=>a.rating).length;
+  let w=0,f=0;
+  Object.values(answers).forEach(a=>{ if(a.rating==="warn")w++; if(a.rating==="flag")f++; });
+
+  let b = [];
+  b.push("TLS STORE VISIT SUMMARY");
+  b.push(line);
+  b.push("Store Format: " + (storeFormat || "—"));
+  b.push("HFG Store Number: " + g("storeNum"));
+  b.push("Region Number: " + (g("regionNum") || "—"));
+  b.push("Store Manager: " + (g("mgrName") || "—"));
+  b.push("TLS: " + g("tlsName"));
+  b.push("Date of Visit: " + g("visitDate"));
+  b.push("");
+  b.push(`Items assessed: ${done} / ${totalQ}   |   Attention Needed: ${w}   |   Immediate Action: ${f}`);
+  b.push("");
+  b.push("HIGH-LEVEL VISIT OVERVIEW");
+  b.push(line);
+  const catNames = {sales:"Sales", inv:"Inventory", shrink:"Shrink", food:"Food Safety", safety:"Safety"};
+  OV_DEPTS.forEach(od => {
+    const parts = OV_CATS.map(c => {
+      const r = cellRating(od, c);
+      return r ? `${catNames[c]}: ${RSYM[r]}` : null;
+    }).filter(Boolean);
+    const co = callouts[od.id];
+    if (parts.length || co){
+      b.push(od.name + " — " + (parts.join("  ") || "—"));
+      if (co) b.push("   Callout: " + co);
+    }
+  });
+  b.push("");
+  DEPTS.forEach(d => {
+    const has = Object.keys(answers).some(qid => qid.startsWith(d.id+".") && answers[qid].rating);
+    if (!has) return;
+    b.push(d.name);
+    b.push(line);
+    Object.entries(d.sections).forEach(([cat, qs]) => {
+      const items = qs.map((text,qi)=>({text, a:answers[`${d.id}.${cat}.${qi}`]})).filter(x=>x.a && x.a.rating);
+      if (!items.length) return;
+      b.push(CATS[cat].replace(/^[^\s]+\s/,"").toUpperCase());
+      items.forEach(x=>{
+        b.push(`  ${RSYM[x.a.rating]} ${RLABEL[x.a.rating]} — ${x.text}`);
+        if (x.a.note) b.push(`     Note: ${x.a.note}`);
+      });
+    });
+    b.push("");
+  });
+  b.push("COACHING SUMMARY — covered with Store Manager / PIC");
+  b.push(line);
+  b.push("Best Practices Observed:");
+  b.push(g("bestPractices") || "—");
+  b.push("");
+  b.push("Opportunities for Improvement:");
+  b.push(g("opportunities") || "—");
+  b.push("");
+  b.push("Submitted via TLS Store Visit app");
+
+  const subject = `TLS Store Visit — Store ${g("storeNum")} — ${g("visitDate")}`;
+  const to = g("recipients") || "dhall@houchens.com";
+  const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(b.join("\n"))}`;
+  window.location.href = url;
+  toast("Opening your email app with the completed summary…");
+}
+</script>
+</body>
+</html>
