@@ -104,6 +104,12 @@
   .notes .nl{font-size:.68rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;display:flex;justify-content:space-between}
   .notes .req{color:var(--flag)}
   .note-toggle{margin-top:8px;background:none;border:none;font-size:.75rem;font-weight:700;color:var(--green);cursor:pointer;padding:2px 0}
+  .photo-btn{margin-top:8px;background:none;border:1px dashed var(--green);border-radius:8px;font-size:.75rem;font-weight:700;color:var(--green);cursor:pointer;padding:8px 12px;width:100%}
+  .photo-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .photo-thumb{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo-thumb .rm{position:absolute;top:2px;right:2px;width:20px;height:20px;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:.7rem;line-height:20px;padding:0;cursor:pointer}
+  .share-photos-btn{background:#fff;border:1.5px solid var(--green);color:var(--green);border-radius:12px;padding:12px 10px;font-size:.8rem;font-weight:800;cursor:pointer;white-space:nowrap}
   /* ---------- overview grid ---------- */
   .grid-scroll{overflow-x:auto;margin:10px -4px 0}
   table.ov{border-collapse:collapse;width:100%;min-width:520px}
@@ -112,8 +118,9 @@
   table.ov td{padding:3px}
   table.ov td.dept{font-size:.78rem;font-weight:700;white-space:nowrap;padding-right:8px}
   .cell{
+    display:flex;align-items:center;justify-content:center;
     width:100%;height:38px;border:1.5px solid var(--line);border-radius:8px;background:#fff;
-    font-size:1rem;cursor:pointer;
+    font-size:1rem;
   }
   .cell.star{background:var(--gold-bg);border-color:var(--gold)}
   .cell.good{background:var(--ok-bg);border-color:var(--ok)}
@@ -201,7 +208,7 @@
   <!-- ============ OVERVIEW GRID ============ -->
   <div class="card" id="overviewCard">
     <h2>📋 High-Level Visit Overview <span class="badge" id="ovBadge"></span></h2>
-    <p class="hint">Fill this out at the end of your visit. Cells pre-fill from your detailed answers (lowest rating in each area) — tap any cell to adjust or set it, tap again to cycle ⭐ → ✅ → ⚠️ → 🚩 → clear.</p>
+    <p class="hint">This grid fills in automatically from your detailed answers — each cell shows the lowest rating recorded in that area.</p>
     <div class="grid-scroll">
       <table class="ov">
         <thead>
@@ -236,6 +243,7 @@
 <div class="footbar">
   <div class="footbar-inner">
     <div class="attn-pill" id="attnPill"></div>
+    <button class="share-photos-btn" id="sharePhotosBtn" style="display:none" title="Share attached photos">📷 0</button>
     <button class="submit-btn" id="submitBtn">Submit Visit Report</button>
   </div>
 </div>
@@ -425,8 +433,7 @@ const RLABEL = {star:"Excellent", good:"Good", warn:"Attention Needed", flag:"Im
 const RANK = {flag:0, warn:1, good:2, star:3};
 
 /* ================= STATE ================= */
-const answers = {};        // qid -> {rating, note}
-const ovManual = {};       // "dept.cat" -> rating key or null (manual override)
+const answers = {};        // qid -> {rating, note, photos}
 const callouts = {};       // ovDeptId -> text
 let totalQ = 0;
 
@@ -459,6 +466,9 @@ DEPTS.forEach((d, di) => {
         <div class="notes" id="notes-${cssId(qid)}">
           <div class="nl"><span>Coaching Notes</span><span class="req" id="req-${cssId(qid)}" style="display:none">Required</span></div>
           <textarea data-qid="${qid}" placeholder="What did you observe, and what's the coaching point?"></textarea>
+          <button class="photo-btn" data-qid="${qid}">📷 Add photos</button>
+          <input type="file" accept="image/*" multiple hidden id="file-${cssId(qid)}" data-qid="${qid}">
+          <div class="photo-strip" id="strip-${cssId(qid)}"></div>
         </div>`;
       body.appendChild(q);
     });
@@ -505,6 +515,50 @@ document.querySelectorAll(".notes textarea").forEach(ta => {
     syncNoteFlag(qid);
   });
 });
+/* photo attachments in coaching notes */
+document.querySelectorAll(".photo-btn").forEach(b => {
+  b.addEventListener("click", () => document.getElementById("file-"+cssId(b.dataset.qid)).click());
+});
+document.querySelectorAll('input[type="file"][data-qid]').forEach(inp => {
+  inp.addEventListener("change", () => {
+    const qid = inp.dataset.qid;
+    answers[qid] = answers[qid] || {};
+    answers[qid].photos = answers[qid].photos || [];
+    [...inp.files].forEach(f => answers[qid].photos.push({file:f, url:URL.createObjectURL(f)}));
+    inp.value = "";
+    renderStrip(qid);
+    updateShareBtn();
+  });
+});
+function renderStrip(qid){
+  const strip = document.getElementById("strip-"+cssId(qid));
+  const ph = (answers[qid] && answers[qid].photos) || [];
+  strip.innerHTML = ph.map((p,i) =>
+    `<div class="photo-thumb"><img src="${p.url}" alt="photo"><button class="rm" data-i="${i}">✕</button></div>`).join("");
+  strip.querySelectorAll(".rm").forEach(btn => btn.addEventListener("click", () => {
+    const i = +btn.dataset.i;
+    URL.revokeObjectURL(ph[i].url);
+    ph.splice(i, 1);
+    renderStrip(qid);
+    updateShareBtn();
+  }));
+}
+function allPhotos(){ return Object.values(answers).flatMap(a => a.photos || []); }
+function updateShareBtn(){
+  const n = allPhotos().length;
+  const b = document.getElementById("sharePhotosBtn");
+  b.style.display = n ? "block" : "none";
+  b.textContent = "📷 " + n;
+}
+document.getElementById("sharePhotosBtn").addEventListener("click", async () => {
+  const files = allPhotos().map(p => p.file);
+  if (navigator.canShare && navigator.canShare({files})){
+    try { await navigator.share({files, title:"TLS Store Visit Photos"}); } catch(e){}
+  } else {
+    toast("Photo sharing isn't supported on this device — attach photos from your camera roll instead.");
+  }
+});
+
 function syncNoteFlag(qid){
   const a = answers[qid];
   const req = document.getElementById("req-"+cssId(qid));
@@ -514,10 +568,11 @@ function syncNoteFlag(qid){
 
 /* ================= OVERVIEW GRID ================= */
 const ovBody = document.getElementById("ovBody");
-OV_DEPTS.forEach(od => {
+const OV_GRID = OV_DEPTS.filter(od => od.linked);
+OV_GRID.forEach(od => {
   const tr = document.createElement("tr");
   tr.innerHTML = `<td class="dept">${od.name}</td>` + OV_CATS.map(c =>
-    `<td><button class="cell" data-cell="${od.id}.${c}"></button></td>`).join("");
+    `<td><span class="cell" data-cell="${od.id}.${c}"></span></td>`).join("");
   ovBody.appendChild(tr);
 });
 const calloutsEl = document.getElementById("callouts");
@@ -546,9 +601,7 @@ function autoRating(deptId, cat){
   return worst;
 }
 function cellRating(od, cat){
-  const key = od.id + "." + cat;
-  if (key in ovManual) return ovManual[key];        // manual override (may be null = cleared)
-  return od.linked ? autoRating(od.id, cat) : null; // auto from details
+  return od.linked ? autoRating(od.id, cat) : null; // auto from detailed answers only
 }
 function paintOverview(){
   let filled = 0;
@@ -560,18 +613,8 @@ function paintOverview(){
     if (r){ cell.classList.add(r); cell.textContent = RSYM[r]; filled++; }
     else cell.textContent = "";
   });
-  document.getElementById("ovBadge").textContent = filled + " / " + (OV_DEPTS.length * OV_CATS.length);
+  document.getElementById("ovBadge").textContent = filled + " / " + (OV_GRID.length * OV_CATS.length);
 }
-ovBody.addEventListener("click", e => {
-  const cell = e.target.closest(".cell"); if(!cell) return;
-  const [dId, cat] = cell.dataset.cell.split(".");
-  const od = OV_DEPTS.find(o=>o.id===dId);
-  const cur = cellRating(od, cat);
-  const order = ["star","good","warn","flag", null];
-  const next = order[(order.indexOf(cur===undefined?null:cur) + 1) % order.length];
-  ovManual[dId + "." + cat] = next;
-  paintOverview();
-});
 
 /* ================= COVER ================= */
 let storeFormat = "";
@@ -675,6 +718,7 @@ function sendEmail(){
       items.forEach(x=>{
         b.push(`  ${RSYM[x.a.rating]} ${RLABEL[x.a.rating]} — ${x.text}`);
         if (x.a.note) b.push(`     Note: ${x.a.note}`);
+        if (x.a.photos && x.a.photos.length) b.push(`     Photos: ${x.a.photos.length} (sent separately)`);
       });
     });
     b.push("");
@@ -693,7 +737,10 @@ function sendEmail(){
   const to = g("recipients") || "dhall@houchens.com";
   const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(b.join("\n"))}`;
   window.location.href = url;
-  toast("Opening your email app with the completed summary…");
+  const nPhotos = allPhotos().length;
+  toast(nPhotos
+    ? `Opening your email app… You have ${nPhotos} photo(s) — after sending, tap the 📷 button to share them.`
+    : "Opening your email app with the completed summary…");
 }
 </script>
 </body>
