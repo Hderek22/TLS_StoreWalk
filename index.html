@@ -672,7 +672,7 @@ document.getElementById("submitBtn").addEventListener("click", () => {
   sendEmail();
 });
 
-function sendEmail(){
+async function sendEmail(){
   const g = id => document.getElementById(id).value.trim();
   const line = "----------------------------------------";
   const done = Object.values(answers).filter(a=>a.rating).length;
@@ -735,11 +735,24 @@ function sendEmail(){
 
   const subject = `TLS Store Visit — Store ${g("storeNum")} — ${g("visitDate")}`;
   const to = g("recipients") || "dhall@houchens.com";
-  const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(b.join("\n"))}`;
+  const bodyText = b.join("\n");
+  const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+  const photoFiles = allPhotos().map(p => p.file);
+
+  if (photoFiles.length && navigator.canShare && navigator.canShare({files: photoFiles})){
+    try {
+      await navigator.share({files: photoFiles, title: subject, text: bodyText});
+      toast(`Choose Mail (or your email app) in the share sheet to send the summary with all ${photoFiles.length} photo(s) attached.`);
+      return;
+    } catch(e){
+      if (e.name === "AbortError") return; // user cancelled the share sheet
+      // sharing failed for another reason — fall back to mailto below
+    }
+  }
+
   window.location.href = url;
-  const nPhotos = allPhotos().length;
-  toast(nPhotos
-    ? `Opening your email app… You have ${nPhotos} photo(s) — after sending, tap the 📷 button to share them.`
+  toast(photoFiles.length
+    ? `Opening your email app… Note: your ${photoFiles.length} photo(s) couldn't be attached automatically — attach them from your camera roll, or tap the 📷 button to share them separately.`
     : "Opening your email app with the completed summary…");
 }
 </script>
