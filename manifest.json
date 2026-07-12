@@ -1,6 +1,6 @@
 {
   "name": "TLS Store Visit Summary",
-  "short_name": "Store Visit",
+  "short_name": "TLS Walk",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
