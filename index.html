@@ -244,7 +244,7 @@
     <h2>📧 Send Completed Summary</h2>
     <p class="hint">Email completed summaries to the VP, DO, ROM, RMs, Director of TL, Mandy Mooney, and the Store Manager. Add recipients separated by commas.</p>
     <label class="field" for="recipients">Recipients</label>
-    <input type="email" id="recipients" multiple value="dhall@houchens.com" placeholder="name@houchens.com, name@houchens.com">
+    <input type="email" id="recipients" multiple value="DOusley@houchens.com" placeholder="name@houchens.com, name@houchens.com">
   </div>
 
 </main>
@@ -768,7 +768,7 @@ async function sendEmail(){
   b.push("Submitted via TLS Store Visit app");
 
   const subject = `TLS Store Visit — Store ${g("storeNum")} — ${g("visitDate")}`;
-  const to = g("recipients") || "dhall@houchens.com";
+  const to = g("recipients") || "DOusley@houchens.com";
   const bodyText = b.join("\n");
   const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
   const photoFiles = allPhotos().map(p => p.file);
