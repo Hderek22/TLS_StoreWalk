@@ -44,7 +44,12 @@
     padding:12px 16px 10px;
     box-shadow:0 2px 8px rgba(0,0,0,.18);
   }
-  header h1{font-size:1rem;font-weight:700;letter-spacing:.02em}
+  .new-report-btn{
+    position:absolute;top:10px;right:14px;
+    background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);color:#fff;
+    border-radius:20px;padding:5px 10px;font-size:.68rem;font-weight:700;cursor:pointer;
+  }
+  header h1{font-size:1rem;font-weight:700;letter-spacing:.02em;padding-right:70px}
   header .sub{font-size:.72rem;opacity:.75;margin-top:2px}
   .progress-wrap{margin-top:8px;display:flex;align-items:center;gap:10px}
   .progress-bar{flex:1;height:6px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden}
@@ -135,7 +140,7 @@
   .cell.flag{background:var(--flag-bg);border-color:var(--flag)}
   .callout-row{margin-top:10px}
   .callout-row label{font-size:.72rem;font-weight:700;color:var(--ink-soft)}
-  .callout-row input{margin-top:3px;font-size:.88rem;padding:8px 10px}
+  .callout-row textarea{margin-top:3px;font-size:.88rem;padding:10px 12px;min-height:52px;line-height:1.4}
   /* ---------- footer bar ---------- */
   .footbar{
     position:fixed;bottom:0;left:0;right:0;z-index:60;
@@ -157,6 +162,14 @@
     opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;max-width:88%;text-align:center;
   }
   .toast.show{opacity:1}
+  /* confirmation modal */
+  .confirm-overlay{position:fixed;inset:0;background:rgba(15,30,20,.55);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+  .confirm-overlay.show{display:flex}
+  .confirm-card{background:#fff;border-radius:16px;padding:26px 22px 20px;max-width:360px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  .confirm-icon{font-size:2.2rem;margin-bottom:8px}
+  .confirm-card h3{font-size:1.05rem;font-weight:800;color:var(--green-deep);margin-bottom:8px}
+  .confirm-card p{font-size:.88rem;line-height:1.5;color:var(--ink-soft)}
+  .confirm-ok{margin-top:18px;width:100%;background:var(--green-deep);color:#fff;border:none;border-radius:10px;padding:12px;font-size:.92rem;font-weight:800;cursor:pointer}
 </style>
 <script data-goatcounter="https://hderek22.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
@@ -164,6 +177,7 @@
 <body>
 
 <header>
+  <button class="new-report-btn" id="newReportBtn" type="button">↺ New</button>
   <h1>TLS Store Visit Summary</h1>
   <div class="sub">Operational Excellence • Sales • Inventory • Shrink • Food Safety • Personal Safety</div>
   <div class="progress-wrap">
@@ -259,6 +273,15 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-card">
+    <div class="confirm-icon">📬</div>
+    <h3>Report Ready in Mail</h3>
+    <p id="confirmMsg"></p>
+    <button class="confirm-ok" id="confirmOk">Got it</button>
+  </div>
+</div>
+
 <script>
 /* ================= DATA — from Total Loss Store Visit Workbook ================= */
 const CATS = { sales:"📈 Sales Execution", inv:"📦 Inventory Management", shrink:"🗑 Shrink Control", food:"🛡 Food Safety", safety:"👷 Personal Safety" };
@@ -318,6 +341,7 @@ const DEPTS = [
       "Fresh case eye appeal",
       "Ground beef production appropriate",
       "The Ad is brought to life",
+      "Center isle, end of bunker cross-merchandising complements the meat products on display.",
       "Must-Have fresh meat variety maintained"
     ],
     inv:[
@@ -507,6 +531,7 @@ document.querySelectorAll(".rate").forEach(row => {
     }
     syncNoteFlag(qid);
     refresh();
+    scheduleSave();
   });
 });
 
@@ -522,6 +547,7 @@ document.querySelectorAll(".notes textarea").forEach(ta => {
     answers[qid] = answers[qid] || {};
     answers[qid].note = ta.value.trim();
     syncNoteFlag(qid);
+    scheduleSave();
   });
 });
 /* photo attachments in coaching notes */
@@ -614,12 +640,13 @@ OV_DEPTS.forEach(od => {
   const row = document.createElement("div");
   row.className = "callout-row";
   row.innerHTML = `<label>High Level Callouts — ${od.name}</label>
-    <input type="text" data-callout="${od.id}" placeholder="Optional one-liner">`;
+    <textarea rows="2" data-callout="${od.id}" placeholder="Optional notes"></textarea>`;
   calloutsEl.appendChild(row);
 });
 calloutsEl.addEventListener("input", e => {
   const k = e.target.dataset.callout; if(!k) return;
   callouts[k] = e.target.value.trim();
+  scheduleSave();
 });
 
 function autoRating(deptId, cat){
@@ -657,8 +684,89 @@ document.getElementById("fmtChips").addEventListener("click", e => {
   document.querySelectorAll("#fmtChips .chip").forEach(x=>x.classList.remove("sel"));
   if (storeFormat === c.dataset.v){ storeFormat=""; }
   else { c.classList.add("sel"); storeFormat = c.dataset.v; }
+  scheduleSave();
 });
 document.getElementById("visitDate").value = new Date().toISOString().slice(0,10);
+
+const COVER_FIELD_IDS = ["storeNum","regionNum","mgrName","tlsName","visitDate","bestPractices","opportunities","recipients"];
+COVER_FIELD_IDS.forEach(id => {
+  document.getElementById(id).addEventListener("input", scheduleSave);
+});
+
+/* ================= DRAFT AUTOSAVE ================= */
+const DRAFT_KEY = "tlsWalkDraft";
+let saveTimer;
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveDraft, 400); }
+
+function saveDraft(){
+  const g = id => document.getElementById(id).value;
+  const savedAnswers = {};
+  Object.entries(answers).forEach(([qid,a]) => {
+    if (a.rating || a.note) savedAnswers[qid] = {rating:a.rating, note:a.note || ""};
+  });
+  const draft = {
+    savedAt: Date.now(),
+    answers: savedAnswers,
+    callouts,
+    storeFormat,
+    cover: Object.fromEntries(COVER_FIELD_IDS.map(id => [id, g(id)]))
+  };
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch(e){}
+}
+
+function applyDraft(draft){
+  const c = draft.cover || {};
+  COVER_FIELD_IDS.forEach(id => {
+    if (c[id] !== undefined) document.getElementById(id).value = c[id];
+  });
+  if (draft.storeFormat){
+    storeFormat = draft.storeFormat;
+    document.querySelectorAll("#fmtChips .chip").forEach(x => x.classList.toggle("sel", x.dataset.v === storeFormat));
+  }
+  Object.entries(draft.callouts || {}).forEach(([k,v]) => {
+    callouts[k] = v;
+    const ta = document.querySelector(`textarea[data-callout="${k}"]`);
+    if (ta) ta.value = v;
+  });
+  Object.entries(draft.answers || {}).forEach(([qid,a]) => {
+    if (!a.rating && !a.note) return;
+    answers[qid] = {rating:a.rating, note:a.note};
+    const notesEl = document.getElementById("notes-"+cssId(qid));
+    if (a.rating){
+      const row = document.querySelector(`.rate[data-qid="${qid}"]`);
+      if (row) row.querySelectorAll("button").forEach(b => b.classList.toggle("sel", b.dataset.r === a.rating));
+      if (notesEl && (a.rating === "warn" || a.rating === "flag")) notesEl.classList.add("show");
+    }
+    if (a.note){
+      const ta = document.querySelector(`.notes textarea[data-qid="${qid}"]`);
+      if (ta) ta.value = a.note;
+      if (notesEl) notesEl.classList.add("show");
+    }
+    syncNoteFlag(qid);
+  });
+  refresh();
+}
+
+function loadDraft(){
+  let raw;
+  try { raw = localStorage.getItem(DRAFT_KEY); } catch(e){ return; }
+  if (!raw) return;
+  try {
+    applyDraft(JSON.parse(raw));
+    toast("Restored your in-progress report from earlier.");
+  } catch(e){}
+}
+
+function clearDraft(){
+  try { localStorage.removeItem(DRAFT_KEY); } catch(e){}
+}
+
+document.getElementById("newReportBtn").addEventListener("click", () => {
+  if (confirm("Start a new report? This clears the current in-progress report (photos will need to be re-attached).")){
+    clearDraft();
+    location.reload();
+  }
+});
 
 /* ================= PROGRESS / COUNTS ================= */
 function refresh(){
@@ -677,6 +785,7 @@ function refresh(){
   paintOverview();
 }
 refresh();
+loadDraft();
 
 /* ================= SUBMIT ================= */
 function toast(msg){
@@ -684,6 +793,16 @@ function toast(msg){
   t.textContent = msg; t.classList.add("show");
   setTimeout(()=>t.classList.remove("show"), 3200);
 }
+function showConfirm(msg){
+  document.getElementById("confirmMsg").textContent = msg;
+  document.getElementById("confirmOverlay").classList.add("show");
+}
+document.getElementById("confirmOk").addEventListener("click", () => {
+  document.getElementById("confirmOverlay").classList.remove("show");
+});
+document.getElementById("confirmOverlay").addEventListener("click", e => {
+  if (e.target.id === "confirmOverlay") e.target.classList.remove("show");
+});
 
 document.getElementById("submitBtn").addEventListener("click", () => {
   const storeNum = document.getElementById("storeNum").value.trim();
@@ -776,7 +895,8 @@ async function sendEmail(){
   if (photoFiles.length && navigator.canShare && navigator.canShare({files: photoFiles})){
     try {
       await navigator.share({files: photoFiles, title: subject, text: bodyText});
-      toast(`Choose Mail (or your email app) in the share sheet to send the summary with all ${photoFiles.length} photo(s) attached.`);
+      clearDraft();
+      showConfirm(`Your report and ${photoFiles.length} photo(s) have been handed off to Mail. Review it there, then tap Send to deliver it.`);
       return;
     } catch(e){
       if (e.name === "AbortError") return; // user cancelled the share sheet
@@ -785,9 +905,10 @@ async function sendEmail(){
   }
 
   window.location.href = url;
-  toast(photoFiles.length
-    ? `Opening your email app… Note: your ${photoFiles.length} photo(s) couldn't be attached automatically — attach them from your camera roll, or tap the 📷 button to share them separately.`
-    : "Opening your email app with the completed summary…");
+  clearDraft();
+  showConfirm(photoFiles.length
+    ? `Your report has been handed off to Mail, but the ${photoFiles.length} photo(s) couldn't be attached automatically. Attach them from your camera roll, or tap the 📷 button to share them separately — then tap Send to deliver everything.`
+    : "Your report has been handed off to Mail. Review it there, then tap Send to deliver it.");
 }
 </script>
 </body>
